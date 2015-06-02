@@ -1,11 +1,12 @@
 <?php namespace AMQPQueue;
 
+use AMQPConnection;
 use Illuminate\Queue\Connectors\ConnectorInterface;
 
 class Connector implements ConnectorInterface
 {
 	/**
-	 * @var \AMQPConnection[]
+	 * @var AMQPConnection[]
 	 */
 	static protected $connections = [];
 
@@ -24,7 +25,7 @@ class Connector implements ConnectorInterface
 		if (isset(static::$connections[$key])) {
 			$connection = static::$connections[$key];
 		} else {
-			$connection = new \AMQPConnection([
+			$connection = new AMQPConnection([
 				'host'              => $config['host'],
 				'port'              => $config['port'],
 				'vhost'             => $config['vhost'],
@@ -34,8 +35,11 @@ class Connector implements ConnectorInterface
 				'write_timeout'     => $config['write_timeout'],
 				'connect_timeout'   => $config['connect_timeout'],
 			]);
-			$connection->connect();
 			static::$connections[$key] = $connection;
+		}
+
+		if ( !$connection->isConnected() ) {
+			$connection->connect();
 		}
 
 		return new Queue($connection, $config);
@@ -49,8 +53,15 @@ class Connector implements ConnectorInterface
 	 */
 	protected function createKeyFromConfig(array $config)
 	{
-		ksort($config);
-		return serialize($config);
+		$key = [];
+
+		foreach ( ['host', 'port', 'vhost', 'login', 'password', 'connect_timeout', 'read_timeout', 'write_timeout'] as $name ) {
+			if (array_key_exists($name, $config)) {
+				$key[] = "[{$name}={$config[$name]}]";
+			}
+		}
+
+		return implode('', $key);
 	}
 
 }

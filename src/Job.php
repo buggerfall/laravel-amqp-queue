@@ -1,5 +1,9 @@
 <?php namespace AMQPQueue;
 
+use AMQPEnvelope;
+use AMQPExchange;
+use AMQPQueue;
+use DateTime;
 use Illuminate\Container\Container;
 use Illuminate\Queue\Jobs\Job as BaseJob;
 use Illuminate\Contracts\Queue\Job as JobContract;
@@ -7,34 +11,35 @@ use Illuminate\Contracts\Queue\Job as JobContract;
 class Job extends BaseJob implements JobContract
 {
 	/**
-	 * @var \AMQPExchange
+	 * @var AMQPExchange
 	 */
 	protected $amqpExchange;
 
 	/**
-	 * @var \AMQPQueue
+	 * @var AMQPQueue
 	 */
 	protected $amqpQueue;
 
 	/**
-	 * @var \AMQPEnvelope
+	 * @var AMQPEnvelope
 	 */
 	protected $amqpMessage;
 
 	/**
 	 * @var Queue
 	 */
-	protected $connection;
+	protected $laravelQueue;
 
 	/**
-	 * @param \AMQPExchange $exchange
-	 * @param \AMQPQueue $queue
-	 * @param \AMQPEnvelope $message
+	 * @param AMQPExchange $exchange
+	 * @param AMQPQueue $queue
+	 * @param AMQPEnvelope $message
 	 */
-	public function __construct(Container $container, Queue $connection, \AMQPExchange $exchange, \AMQPQueue $queue, \AMQPEnvelope $message)
+	public function __construct(Container $container, Queue $laravelQueue, AMQPExchange $exchange, AMQPQueue $queue, AMQPEnvelope $message)
 	{
 		$this->container = $container;
-		$this->connection = $connection;
+		$this->laravelQueue = $laravelQueue;
+
 		$this->amqpExchange = $exchange;
 		$this->amqpQueue = $queue;
 		$this->amqpMessage = $message;
@@ -90,14 +95,19 @@ class Job extends BaseJob implements JobContract
 	}
 
 	/**
-	 * @param int $delay
+	 * @param DateTime|int $delay
 	 */
 	public function release($delay = 0)
 	{
+		$delay = $this->getSeconds($delay);
 		parent::release($delay);
 
 		// reject the message.
-		$this->amqpQueue->reject($this->amqpMessage->getDeliveryTag());
+		try {
+			$this->amqpQueue->reject($this->amqpMessage->getDeliveryTag());
+		} catch (\AMQPException $e) {
+			// void for now
+		}
 
 		$body = json_decode($this->amqpMessage->getBody(), true);
 		$job = $body['job'];
@@ -111,9 +121,9 @@ class Job extends BaseJob implements JobContract
 		}
 
 		if ($delay > 0) {
-			$this->connection->later($delay, $job, $data, $this->amqpQueue->getName());
+			$this->laravelQueue->later($delay, $job, $data, $this->amqpQueue->getName());
 		} else {
-			$this->connection->push($job, $data, $this->amqpQueue->getName());
+			$this->laravelQueue->push($job, $data, $this->amqpQueue->getName());
 		}
 	}
 

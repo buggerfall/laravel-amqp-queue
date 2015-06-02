@@ -1,5 +1,6 @@
 <?php namespace AMQPQueue;
 
+use Illuminate\Queue\QueueManager;
 use Illuminate\Support\ServiceProvider as BaseServiceProvider;
 
 class ServiceProvider extends BaseServiceProvider
@@ -12,9 +13,11 @@ class ServiceProvider extends BaseServiceProvider
 	public function register()
 	{
 		$this->app->booted(function() {
-			$this->app->queue->addConnector('rabbitmq', function() {
-				return new Connector();
-			});
+			/* @var QueueManager $manager */
+			$manager = $this->app['queue'];
+
+			// Add connector
+			$manager->addConnector('amqp', function () { return new Connector(); });
 		});
 	}
 

@@ -1,12 +1,24 @@
 <?php namespace AMQPQueue;
 
+use AMQPChannel;
+use AMQPConnection;
+use AMQPException;
+use AMQPExchangeException;
+use AMQPQueueException;
+use DateTime;
 use Illuminate\Queue\Queue as BaseQueue;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
 
 class Queue extends BaseQueue implements QueueContract
 {
+	/**
+	 * @var AMQPConnection
+	 */
 	protected $connection;
 
+	/**
+	 * @var AMQPChannel
+	 */
 	protected $channel;
 
 	/**
@@ -15,16 +27,16 @@ class Queue extends BaseQueue implements QueueContract
 	protected $config = [];
 
 	/**
-	 * @param \AMQPConnection $connection
-	 * @param string $queueName
+	 * @param AMQPConnection $connection
 	 * @param array $config
 	 */
-	public function __construct(\AMQPConnection $connection, array $config)
+	public function __construct(AMQPConnection $connection, array $config)
 	{
 		$this->connection = $connection;
-		$this->channel = new \AMQPChannel($connection);
-		$this->channel->setPrefetchCount(1);
 		$this->config = $config;
+
+		$this->channel = new AMQPChannel($connection);
+		$this->channel->setPrefetchCount(1);
 	}
 
 	/**
@@ -57,7 +69,14 @@ class Queue extends BaseQueue implements QueueContract
 		// declare exchange
 		$exchange = $this->getExchangeForQueue($queue);
 		if ($exchange->getName()) {
-			$exchange->declareExchange();
+			try {
+				$declared = $exchange->declareExchange();
+				if ( !$declared ) {
+					return false;
+				}
+			} catch (AMQPExchangeException $e) {
+				return false;
+			}
 		}
 
 		// publish message
@@ -84,10 +103,8 @@ class Queue extends BaseQueue implements QueueContract
 	 */
 	public function later($delay, $job, $data = '', $queue = null)
 	{
-		// calculate the delay in milliseconds
-		if ( $delay instanceof \DateTime ) {
-			$delay = $delay->diff(new \DateTime())->s * 1000;
-		}
+		$channel = $this->channel;
+		$delay = $this->getSeconds($delay);
 
 		// declare queue
 		$destinationQueue = $this->getQueue($queue);
@@ -97,13 +114,13 @@ class Queue extends BaseQueue implements QueueContract
 		$destinationExchange = $this->getExchangeForQueue($destinationQueue);
 
 		// create the dead letter queue
-		$deferredQueueName = sprintf('deferred from %s:%s for %sms', $destinationExchange->getName(), $destinationQueue->getName(), number_format($delay));
-		$deferredQueue = new \AMQPQueue($this->channel);
+		$deferredQueueName = sprintf('deferred from %s:%s for %ss', $destinationExchange->getName(), $destinationQueue->getName(), number_format($delay));
+		$deferredQueue = new \AMQPQueue($channel);
 		$deferredQueue->setName($deferredQueueName);
 		$deferredQueue->setFlags(AMQP_DURABLE);
 		$deferredQueue->setArgument('x-dead-letter-exchange', $destinationExchange->getName() ?: '');
 		$deferredQueue->setArgument('x-dead-letter-routing-key', $destinationQueue->getName());
-		$deferredQueue->setArgument('x-expires', (2 * $delay));
+		$deferredQueue->setArgument('x-expires', (int)(1.5 * $delay * 1000));
 		$deferredQueue->declareQueue();
 
 		return $destinationExchange->publish(
@@ -113,7 +130,7 @@ class Queue extends BaseQueue implements QueueContract
 			[
 				'delivery_mode' => 2,
 				'content_type' => 'application/json',
-				'expiration' => (string)$delay,
+				'expiration' => (string) ($delay * 1000),
 			]);
 	}
 
@@ -125,20 +142,12 @@ class Queue extends BaseQueue implements QueueContract
 	 */
 	public function pop($queue = null)
 	{
-		try {
-			$queue = $this->getQueue($queue);
-			$exchange = $this->getExchangeForQueue($queue);
+		$queue = $this->getQueue($queue);
+		$exchange = $this->getExchangeForQueue($queue);
 
-			$message = $queue->get(AMQP_NOPARAM);
-			if ( $message instanceof \AMQPEnvelope ) {
-				return new Job($this->container, $this, $exchange, $queue, $message);
-			}
-		}
-		catch (\AMQPConnectionException $e) {
-			// void
-		}
-		catch (\AMQPChannelException $e) {
-			// void
+		$message = $queue->get(AMQP_NOPARAM);
+		if ( $message instanceof \AMQPEnvelope ) {
+			return new Job($this->container, $this, $exchange, $queue, $message);
 		}
 
 		return null;
@@ -189,11 +198,12 @@ class Queue extends BaseQueue implements QueueContract
 	 */
 	protected function getQueue($queueName)
 	{
-		$queue = new \AMQPQueue($this->channel);
+		$channel = $this->channel;
+		$queue = new \AMQPQueue($channel);
 
 		// determine queue name
 		if (!$queueName) {
-			$queue->setName(array_get($this->config, 'queue defaults.name'));
+			$queue->setName(array_get($this->config, 'defaults.queues.name'));
 		} else {
 			$queue->setName($queueName);
 		}
@@ -202,7 +212,7 @@ class Queue extends BaseQueue implements QueueContract
 		$queueOptions = $this->matchOptions(
 			$queue->getName(),
 			$this->config['queues'],
-			$this->config['queue defaults']);
+			array_get($this->config, 'defaults.queues'));
 
 		// determine flags for the queue
 		$flags = $this->getFlagsFromOptions(['durable', 'exclusive', 'passive', 'autodelete'], $queueOptions);
@@ -217,13 +227,14 @@ class Queue extends BaseQueue implements QueueContract
 	 */
 	protected function getExchangeForQueue(\AMQPQueue $queue)
 	{
-		$exchange = new \AMQPExchange($this->channel);
+		$channel = $this->channel;
+		$exchange = new \AMQPExchange($channel);
 
 		// fetch queue options
 		$queueOptions = $this->matchOptions(
 			$queue->getName(),
 			$this->config['queues'],
-			$this->config['queue defaults']);
+			array_get($this->config, 'defaults.queues'));
 
 		// determine exchange to use
 		if (array_key_exists('exchange', $queueOptions) && trim($queueOptions['exchange'])) {
@@ -234,7 +245,7 @@ class Queue extends BaseQueue implements QueueContract
 		$exchangeOptions = $this->matchOptions(
 			$exchange->getName(),
 			$this->config['exchanges'],
-			$this->config['exchange defaults']);
+			array_get($this->config, 'defaults.exchanges'));
 
 		// determine flags
 		$flags = $this->getFlagsFromOptions(['durable', 'passive'], $exchangeOptions);
