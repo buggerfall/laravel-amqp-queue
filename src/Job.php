@@ -96,9 +96,19 @@ class Job extends BaseJob implements JobContract
 	{
 		parent::release($delay);
 
+		// reject the message.
+		$this->amqpQueue->reject($this->amqpMessage->getDeliveryTag());
+
 		$body = json_decode($this->amqpMessage->getBody(), true);
 		$job = $body['job'];
 		$data = $body['data'];
+
+		// increment the attempt counter
+		if (isset($data['attempts'])) {
+			$data['attempts']++;
+		} else {
+			$data['attempts'] = 1;
+		}
 
 		if ($delay > 0) {
 			$this->connection->later($delay, $job, $data, $this->amqpQueue->getName());
