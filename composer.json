@@ -1,0 +1,17 @@
+{
+    "name": "garbetjie/laravel-amqp-queue",
+    "description": "Laravel queue connector, using the AMQP PECL extension.",
+    "authors": [
+        {
+            "name": "Geoff Garbers",
+            "email": "geoff@garbers.co.za"
+        }
+    ],
+	"autoload": {
+		"psr-4": {
+			"AMQPQueue\\": "src/"
+		}
+	},
+	"license": "MIT",
+    "require": {}
+}
