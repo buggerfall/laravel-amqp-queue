@@ -4,18 +4,15 @@ Laravel queue connector, which makes use of the AMQP PECL PHP extension ([https:
 
 ## Installation
 
-1. Add the following to your `composer.json` requirements, and run a composer update:
-
+Add the following to your `composer.json` requirements, and run a composer update:
 
     "garbetjie/laravel-amqp-queue": "dev-master"
 
-2. Then, add the following to your `providers` array in `app/config/app.php`:
-
+Then, add the following to your `providers` array in `app/config/app.php`:
 
     'AMQPQueue\ServiceProvider',
     
-3. Add the following configuration parameters to `app/config/queue.php`:
-
+Add the following configuration parameters to `app/config/queue.php`:
 
     'connection_name' => [
         'driver' => 'amqp',
