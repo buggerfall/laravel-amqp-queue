@@ -24,32 +24,53 @@ class Queue extends BaseQueue implements QueueContract
 	/**
 	 * @var array
 	 */
-	protected $config = [];
+	protected $config = [ ];
+
+	/**
+	 * Default queue and exchange options.
+	 *
+	 * @var array
+	 */
+	protected $defaultOptions = [
+		'queues' => [
+			'name' => 'laravel',
+			'durable' => true,
+			'passive' => false,
+			'exclusive' => false,
+			'autodelete' => false,
+		],
+		'exchanges' => [
+			'type' => AMQP_EX_TYPE_DIRECT,
+			'durable' => true,
+			'passive' => false,
+		],
+	];
 
 	/**
 	 * @param AMQPConnection $connection
-	 * @param array $config
+	 * @param array          $config
 	 */
-	public function __construct(AMQPConnection $connection, array $config)
+	public function __construct ( AMQPConnection $connection, array $config )
 	{
 		$this->connection = $connection;
 		$this->config = $config;
 
-		$this->channel = new AMQPChannel($connection);
-		$this->channel->setPrefetchCount(1);
+		$this->channel = new AMQPChannel( $connection );
+		$this->channel->setPrefetchCount( 1 );
 	}
 
 	/**
 	 * Push a new job onto the queue.
 	 *
 	 * @param  string $job
-	 * @param  mixed $data
+	 * @param  mixed  $data
 	 * @param  string $queue
+	 *
 	 * @return mixed
 	 */
-	public function push($job, $data = '', $queue = null)
+	public function push ( $job, $data = '', $queue = null )
 	{
-		return $this->pushRaw($this->createPayload($job, $data), $queue);
+		return $this->pushRaw( $this->createPayload( $job, $data ), $queue );
 	}
 
 	/**
@@ -57,24 +78,26 @@ class Queue extends BaseQueue implements QueueContract
 	 *
 	 * @param  string $payload
 	 * @param  string $queue
-	 * @param  array $options
+	 * @param  array  $options
+	 *
 	 * @return mixed
 	 */
-	public function pushRaw($payload, $queue = null, array $options = array())
+	public function pushRaw ( $payload, $queue = null, array $options = array() )
 	{
 		// declare queue
-		$queue = $this->getQueue($queue);
+		$queue = $this->getQueue( $queue );
 		$queue->declareQueue();
 
 		// declare exchange
-		$exchange = $this->getExchangeForQueue($queue);
-		if ($exchange->getName()) {
+		$exchange = $this->getExchangeForQueue( $queue );
+
+		if ( $exchange->getName() ) {
 			try {
 				$declared = $exchange->declareExchange();
-				if ( !$declared ) {
+				if ( ! $declared ) {
 					return false;
 				}
-			} catch (AMQPExchangeException $e) {
+			} catch ( AMQPExchangeException $e ) {
 				return false;
 			}
 		}
@@ -86,106 +109,110 @@ class Queue extends BaseQueue implements QueueContract
 			AMQP_NOPARAM,
 			[
 				'delivery_mode' => 2,
-				'content_type' => 'application/json',
-				'headers' => isset($options['headers']) ? $options['headers'] : [],
-				'priority' => isset($options['priority']) ? $options['priority'] : 0,
-			]);
+				'content_type'  => 'application/json',
+				'headers'       => isset( $options[ 'headers' ] ) ? $options[ 'headers' ] : [ ],
+				'priority'      => isset( $options[ 'priority' ] ) ? $options[ 'priority' ] : 0,
+			] );
 	}
 
 	/**
 	 * Push a new job onto the queue after a delay.
 	 *
 	 * @param  \DateTime|int $delay
-	 * @param  string $job
-	 * @param  mixed $data
-	 * @param  string $queue
+	 * @param  string        $job
+	 * @param  mixed         $data
+	 * @param  string        $queue
+	 *
 	 * @return mixed
 	 */
-	public function later($delay, $job, $data = '', $queue = null)
+	public function later ( $delay, $job, $data = '', $queue = null )
 	{
-		$channel = $this->channel;
-		$delay = $this->getSeconds($delay);
+		$delay = $this->getSeconds( $delay );
 
 		// declare queue
-		$destinationQueue = $this->getQueue($queue);
+		$destinationQueue = $this->getQueue( $queue );
 		$destinationQueue->declareQueue();
 
 		// destination exchange
-		$destinationExchange = $this->getExchangeForQueue($destinationQueue);
+		$destinationExchange = $this->getExchangeForQueue( $destinationQueue );
 
 		// create the dead letter queue
-		$deferredQueueName = sprintf('deferred from %s:%s for %ss', $destinationExchange->getName(), $destinationQueue->getName(), number_format($delay));
-		$deferredQueue = new \AMQPQueue($channel);
-		$deferredQueue->setName($deferredQueueName);
-		$deferredQueue->setFlags(AMQP_DURABLE);
-		$deferredQueue->setArgument('x-dead-letter-exchange', $destinationExchange->getName() ?: '');
-		$deferredQueue->setArgument('x-dead-letter-routing-key', $destinationQueue->getName());
-		$deferredQueue->setArgument('x-expires', (int)(1.5 * $delay * 1000));
+		$deferredQueueName = sprintf( 'deferred from %s:%s for %ss', $destinationExchange->getName(), $destinationQueue->getName(), number_format( $delay ) );
+		$deferredQueue = new \AMQPQueue( $this->channel );
+		$deferredQueue->setName( $deferredQueueName );
+		$deferredQueue->setFlags( AMQP_DURABLE );
+		$deferredQueue->setArgument( 'x-dead-letter-exchange', $destinationExchange->getName() ?: '' );
+		$deferredQueue->setArgument( 'x-dead-letter-routing-key', $destinationQueue->getName() );
+		$deferredQueue->setArgument( 'x-expires', (int)( 1.5 * $delay * 1000 ) );
 		$deferredQueue->declareQueue();
 
 		return $destinationExchange->publish(
-			$this->createPayload($job, $data),
+			$this->createPayload( $job, $data ),
 			$deferredQueue->getName(),
 			AMQP_NOPARAM,
 			[
 				'delivery_mode' => 2,
-				'content_type' => 'application/json',
-				'expiration' => (string) ($delay * 1000),
-			]);
+				'content_type'  => 'application/json',
+				'expiration'    => (string)( $delay * 1000 ),
+			] );
 	}
 
 	/**
 	 * Pop the next job off of the queue.
 	 *
 	 * @param  string $queue
+	 *
 	 * @return \Illuminate\Contracts\Queue\Job|null
 	 */
-	public function pop($queue = null)
+	public function pop ( $queue = null )
 	{
-		$queue = $this->getQueue($queue);
-		$exchange = $this->getExchangeForQueue($queue);
+		$queue = $this->getQueue( $queue );
+		$exchange = $this->getExchangeForQueue( $queue );
 
-		$message = $queue->get(AMQP_NOPARAM);
+		$message = $queue->get( AMQP_NOPARAM );
 		if ( $message instanceof \AMQPEnvelope ) {
-			return new Job($this->container, $this, $exchange, $queue, $message);
+			return new Job( $this->container, $this, $exchange, $queue, $message );
 		}
 
 		return null;
 	}
 
 	/**
+	 * Extracts options from the given array, ensuring the provided defaults are supplied.
+	 *
 	 * @param string $match
-	 * @param array $from
-	 * @param array $defaults
+	 * @param array  $from
+	 * @param array  $defaults
+	 *
 	 * @return array
 	 */
-	protected function matchOptions($match, array $from, array $defaults)
+	protected function extractOptions ( $match, array $from, array $defaults )
 	{
-		$options = $defaults;
-
-		foreach ( $from as $regex => $specific ) {
-			if (preg_match($regex, $match)) {
-				$options = array_merge($options, $specific);
-				break;
+		if ( $from ) {
+			foreach ( $from as $regex => $options ) {
+				if ( preg_match( $regex, $match ) ) {
+					return array_merge( $defaults, $from );
+				}
 			}
 		}
 
-		return $options;
+		return $defaults;
 	}
 
 	/**
 	 * @param array $required
 	 * @param array $options
+	 *
 	 * @return int
 	 */
-	protected function getFlagsFromOptions(array $required, array $options)
+	protected function getFlagsFromOptions ( array $required, array $options )
 	{
 		$flags = AMQP_NOPARAM;
 
-		foreach ($required as $option) {
-			$const = 'AMQP_' . strtoupper($option);
-			if (isset($options[$option]) && !!$options[$option] && defined($const)) {
-				$flags |= constant($const);
+		foreach ( $required as $option ) {
+			$const = 'AMQP_' . strtoupper( $option );
+			if ( isset( $options[ $option ] ) && ! ! $options[ $option ] && defined( $const ) ) {
+				$flags |= constant( $const );
 			}
 		}
 
@@ -194,70 +221,75 @@ class Queue extends BaseQueue implements QueueContract
 
 	/**
 	 * @param $queueName
+	 *
 	 * @return \AMQPQueue
 	 */
-	protected function getQueue($queueName)
+	protected function getQueue ( $queueName )
 	{
-		$channel = $this->channel;
-		$queue = new \AMQPQueue($channel);
+		$amqpQueue = new \AMQPQueue( $this->channel );
 
 		// determine queue name
-		if (!$queueName) {
-			$queue->setName(array_get($this->config, 'defaults.queues.name'));
+		if ( $queueName ) {
+			$amqpQueue->setName( $queueName );
 		} else {
-			$queue->setName($queueName);
+			$amqpQueue->setName( array_get( $this->config, 'queue_defaults.name' ) );
 		}
 
-		// extract queue options
-		$queueOptions = $this->matchOptions(
-			$queue->getName(),
-			$this->config['queues'],
-			array_get($this->config, 'defaults.queues'));
+		$options = $this->getOptionsForQueue( $amqpQueue->getName() );
+		$flags = $this->getFlagsFromOptions( [ 'durable', 'exclusive', 'passive', 'autodelete' ], $options );
+		$amqpQueue->setFlags( $flags );
 
-		// determine flags for the queue
-		$flags = $this->getFlagsFromOptions(['durable', 'exclusive', 'passive', 'autodelete'], $queueOptions);
-		$queue->setFlags($flags);
+		return $amqpQueue;
+	}
 
-		return $queue;
+	/**
+	 * @param string $queueName
+	 *
+	 * @return array
+	 */
+	protected function getOptionsForQueue ( $queueName )
+	{
+		$overrideOptions = isset( $this->config[ 'queues' ] ) ? $this->config[ 'queues' ] : [];
+		$defaultOptions = isset( $this->config[ 'defaults' ][ 'queues' ] ) ? $this->config[ 'defaults' ][ 'queues' ] : $this->defaultOptions[ 'queues' ];
+
+		return $this->extractOptions( $queueName, $overrideOptions, $defaultOptions );
+	}
+
+	/**
+	 * @param string $exchangeName
+	 *
+	 * @return array
+	 */
+	protected function getOptionsForExchange ( $exchangeName )
+	{
+		$overrideOptions = isset( $this->config[ 'exchanges' ] ) ? $this->config[ 'exchanges' ] : [];
+		$defaultOptions = isset( $this->config[ 'defaults' ][ 'exchanges' ] ) ? $this->config[ 'defaults' ][ 'exchanges' ] : $this->defaultOptions[ 'exchanges' ];
+
+		return $this->extractOptions( $exchangeName, $overrideOptions, $defaultOptions );
 	}
 
 	/**
 	 * @param \AMQPQueue $queue
+	 *
 	 * @return \AMQPExchange
 	 */
-	protected function getExchangeForQueue(\AMQPQueue $queue)
+	protected function getExchangeForQueue ( \AMQPQueue $queue )
 	{
-		$channel = $this->channel;
-		$exchange = new \AMQPExchange($channel);
+		$amqpExchange = new \AMQPExchange( $this->channel );
 
-		// fetch queue options
-		$queueOptions = $this->matchOptions(
-			$queue->getName(),
-			$this->config['queues'],
-			array_get($this->config, 'defaults.queues'));
+		$queueOptions = $this->getOptionsForQueue( $queue->getName() );
 
 		// determine exchange to use
-		if (array_key_exists('exchange', $queueOptions) && trim($queueOptions['exchange'])) {
-			$exchange->setName((string)$queueOptions['exchange']);
+		if ( array_key_exists( 'exchange', $queueOptions ) && trim( $queueOptions[ 'exchange' ] ) ) {
+			$amqpExchange->setName( (string)$queueOptions[ 'exchange' ] );
 		}
 
-		// extract exchange options
-		$exchangeOptions = $this->matchOptions(
-			$exchange->getName(),
-			$this->config['exchanges'],
-			array_get($this->config, 'defaults.exchanges'));
+		$options = $this->getOptionsForExchange( $amqpExchange->getName() );
+		$flags = $this->getFlagsFromOptions( [ 'durable', 'passive' ], $options );
 
-		// determine flags
-		$flags = $this->getFlagsFromOptions(['durable', 'passive'], $exchangeOptions);
-		$exchange->setFlags($flags);
+		$amqpExchange->setFlags( $flags );
+		$amqpExchange->setType( isset( $options[ 'type' ] ) ? $options[ 'type' ] : AMQP_EX_TYPE_DIRECT );
 
-		// determine exchange type
-		if (isset($exchangeOptions['type'])) {
-			$exchange->setType($exchangeOptions['type']);
-		} else {
-			$exchange->setType(AMQP_EX_TYPE_DIRECT);
-		}
-
-		return $exchange;
+		return $amqpExchange;
 	}
 }

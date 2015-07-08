@@ -6,9 +6,38 @@ use Illuminate\Queue\Connectors\ConnectorInterface;
 class Connector implements ConnectorInterface
 {
 	/**
-	 * @var AMQPConnection[]
+	 * @var array
 	 */
-	static protected $connections = [];
+	protected $defaultConnectionParameters =
+	[
+		'port' => 5672,
+		'connect_timeout' => 10,
+		'read_timeout' => 10,
+		'write_timeout' => 10,
+	];
+
+	/**
+	 * Merges global default connection parameters, and creates a new AMQP connection.
+	 *
+	 * @param array $config
+	 *
+	 * @return AMQPConnection
+	 */
+	protected function createConnection ( array $config )
+	{
+		$config = array_merge ( $this->defaultConnectionParameters, $config );
+
+		return new AMQPConnection([
+			'host'            => $config[ 'host' ],
+			'port'            => $config[ 'port' ],
+			'vhost'           => $config[ 'vhost' ],
+			'login'           => $config[ 'login' ],
+			'password'        => $config[ 'password' ],
+			'connect_timeout' => $config[ 'connect_timeout' ],
+			'read_timeout'    => $config[ 'read_timeout' ],
+			'write_timeout'   => $config[ 'write_timeout' ],
+		]);
+	}
 
 	/**
 	 * Establish a queue connection.
@@ -16,52 +45,9 @@ class Connector implements ConnectorInterface
 	 * @param  array $config
 	 * @return Queue
 	 */
-	public function connect(array $config)
+	public function connect( array $config )
 	{
-		// ensure connection key is consistent
-		$key = $this->createKeyFromConfig($config);
-
-		// check whether the connection is already specified
-		if (isset(static::$connections[$key])) {
-			$connection = static::$connections[$key];
-		} else {
-			$connection = new AMQPConnection([
-				'host'              => $config['host'],
-				'port'              => $config['port'],
-				'vhost'             => $config['vhost'],
-				'login'             => $config['login'],
-				'password'          => $config['password'],
-				'read_timeout'      => $config['read_timeout'],
-				'write_timeout'     => $config['write_timeout'],
-				'connect_timeout'   => $config['connect_timeout'],
-			]);
-			static::$connections[$key] = $connection;
-		}
-
-		if ( !$connection->isConnected() ) {
-			$connection->connect();
-		}
-
-		return new Queue($connection, $config);
-	}
-
-	/**
-	 * Creates the key that will be used to store the local connection under.
-	 *
-	 * @param array $config
-	 * @return string
-	 */
-	protected function createKeyFromConfig(array $config)
-	{
-		$key = [];
-
-		foreach ( ['host', 'port', 'vhost', 'login', 'password', 'connect_timeout', 'read_timeout', 'write_timeout'] as $name ) {
-			if (array_key_exists($name, $config)) {
-				$key[] = "[{$name}={$config[$name]}]";
-			}
-		}
-
-		return implode('', $key);
+		return new Queue( $this->createConnection( $config ), $config );
 	}
 
 }

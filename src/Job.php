@@ -32,10 +32,10 @@ class Job extends BaseJob implements JobContract
 
 	/**
 	 * @param AMQPExchange $exchange
-	 * @param AMQPQueue $queue
+	 * @param AMQPQueue    $queue
 	 * @param AMQPEnvelope $message
 	 */
-	public function __construct(Container $container, Queue $laravelQueue, AMQPExchange $exchange, AMQPQueue $queue, AMQPEnvelope $message)
+	public function __construct ( Container $container, Queue $laravelQueue, AMQPExchange $exchange, AMQPQueue $queue, AMQPEnvelope $message )
 	{
 		$this->container = $container;
 		$this->laravelQueue = $laravelQueue;
@@ -50,9 +50,9 @@ class Job extends BaseJob implements JobContract
 	 *
 	 * @return void
 	 */
-	public function fire()
+	public function fire ()
 	{
-		$this->resolveAndFire(json_decode($this->amqpMessage->getBody(), true));
+		$this->resolveAndFire( json_decode( $this->amqpMessage->getBody(), true ) );
 	}
 
 	/**
@@ -60,10 +60,11 @@ class Job extends BaseJob implements JobContract
 	 *
 	 * @return int
 	 */
-	public function attempts()
+	public function attempts ()
 	{
-		$body = json_decode($this->amqpMessage->getBody(), true);
-		return isset($body['data']['attempts']) ? (int)$body['data']['attempts'] : 0;
+		$body = json_decode( $this->amqpMessage->getBody(), true );
+
+		return isset( $body[ 'data' ][ 'attempts' ] ) ? (int)$body[ 'data' ][ 'attempts' ] : 0;
 	}
 
 	/**
@@ -71,7 +72,7 @@ class Job extends BaseJob implements JobContract
 	 *
 	 * @return string
 	 */
-	public function getRawBody()
+	public function getRawBody ()
 	{
 		return $this->amqpMessage->getBody();
 	}
@@ -79,7 +80,7 @@ class Job extends BaseJob implements JobContract
 	/**
 	 * @return string
 	 */
-	public function getQueue()
+	public function getQueue ()
 	{
 		return $this->amqpQueue->getName();
 	}
@@ -87,50 +88,52 @@ class Job extends BaseJob implements JobContract
 	/**
 	 *
 	 */
-	public function delete()
+	public function delete ()
 	{
 		parent::delete();
 
-		$this->amqpQueue->ack($this->amqpMessage->getDeliveryTag());
+		$this->amqpQueue->ack( $this->amqpMessage->getDeliveryTag() );
 	}
 
 	/**
 	 * @param DateTime|int $delay
 	 */
-	public function release($delay = 0)
+	public function release ( $delay = 0 )
 	{
-		$delay = $this->getSeconds($delay);
-		parent::release($delay);
+		$delay = $this->getSeconds( $delay );
+		parent::release( $delay );
 
 		// reject the message.
 		try {
-			$this->amqpQueue->reject($this->amqpMessage->getDeliveryTag());
-		} catch (\AMQPException $e) {
+			$this->amqpQueue->reject( $this->amqpMessage->getDeliveryTag() );
+		} catch ( \AMQPException $e ) {
 			// void for now
 		}
 
-		$body = json_decode($this->amqpMessage->getBody(), true);
-		$job = $body['job'];
-		$data = $body['data'];
+		$body = json_decode( $this->amqpMessage->getBody(), true );
+		$job = $body[ 'job' ];
+		$data = $body[ 'data' ];
 
 		// increment the attempt counter
-		if (isset($data['attempts'])) {
-			$data['attempts']++;
-		} else {
-			$data['attempts'] = 1;
+		if ( isset( $data[ 'attempts' ] ) ) {
+			$data[ 'attempts' ]++;
+		}
+		else {
+			$data[ 'attempts' ] = 1;
 		}
 
-		if ($delay > 0) {
-			$this->laravelQueue->later($delay, $job, $data, $this->amqpQueue->getName());
-		} else {
-			$this->laravelQueue->push($job, $data, $this->amqpQueue->getName());
+		if ( $delay > 0 ) {
+			$this->laravelQueue->later( $delay, $job, $data, $this->amqpQueue->getName() );
+		}
+		else {
+			$this->laravelQueue->push( $job, $data, $this->amqpQueue->getName() );
 		}
 	}
 
 	/**
 	 * @return string
 	 */
-	public function getJobId()
+	public function getJobId ()
 	{
 		return $this->amqpMessage->getCorrelationId();
 	}
