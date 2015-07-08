@@ -191,7 +191,7 @@ class Queue extends BaseQueue implements QueueContract
 		if ( $from ) {
 			foreach ( $from as $regex => $options ) {
 				if ( preg_match( $regex, $match ) ) {
-					return array_merge( $defaults, $from );
+					return array_merge( $defaults, $options );
 				}
 			}
 		}
