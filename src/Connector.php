@@ -27,7 +27,7 @@ class Connector implements ConnectorInterface
 	{
 		$config = array_merge ( $this->defaultConnectionParameters, $config );
 
-		return new AMQPConnection([
+		$connection = new AMQPConnection([
 			'host'            => $config[ 'host' ],
 			'port'            => $config[ 'port' ],
 			'vhost'           => $config[ 'vhost' ],
@@ -37,6 +37,10 @@ class Connector implements ConnectorInterface
 			'read_timeout'    => $config[ 'read_timeout' ],
 			'write_timeout'   => $config[ 'write_timeout' ],
 		]);
+
+		$connection->connect();
+
+		return $connection;
 	}
 
 	/**
