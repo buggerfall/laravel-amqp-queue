@@ -102,17 +102,27 @@ class Queue extends BaseQueue implements QueueContract
 			}
 		}
 
+		$publishOptions = [ 'content_type' => 'application/json' ];
+
+		if ( isset( $options[ 'headers' ] ) && is_array( $options[ 'headers' ] ) ) {
+			$publishOptions[ 'headers' ] = $options[ 'headers' ];
+		}
+
+		if ( isset ($options[ 'priority' ] ) && is_numeric( $options[ 'priority' ] ) ) {
+			$publishOptions[ 'priority' ] = $options[ 'priority' ];
+		}
+
+		if ( ! array_key_exists( 'durable', $options ) || $options[ 'durable' ] ) {
+			$publishOptions[ 'delivery_mode' ] = 2;
+		}
+
 		// publish message
 		return $exchange->publish(
 			$payload,
 			$queue->getName(),
 			AMQP_NOPARAM,
-			[
-				'delivery_mode' => 2,
-				'content_type'  => 'application/json',
-				'headers'       => isset( $options[ 'headers' ] ) ? $options[ 'headers' ] : [ ],
-				'priority'      => isset( $options[ 'priority' ] ) ? $options[ 'priority' ] : 0,
-			] );
+			$publishOptions
+		);
 	}
 
 	/**
