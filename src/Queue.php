@@ -315,4 +315,20 @@ class Queue extends BaseQueue implements QueueContract
 
 		return $amqpExchange;
 	}
+
+	/**
+	 * Calculate the number of seconds with the given delay.
+	 *
+	 * @param  \DateTime|int  $delay
+	 * @return int
+	 */
+	protected function getSeconds($delay)
+	{
+		if ($delay instanceof DateTime)
+		{
+			return max(0, $delay->getTimestamp() - time());
+		}
+
+		return (int) $delay;
+	}
 }

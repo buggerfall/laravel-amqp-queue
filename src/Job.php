@@ -31,9 +31,11 @@ class Job extends BaseJob implements JobContract
 	protected $laravelQueue;
 
 	/**
-	 * @param AMQPExchange $exchange
-	 * @param AMQPQueue    $queue
-	 * @param AMQPEnvelope $message
+	 * @param Container 	$container
+	 * @param Queue			$laravelQueue
+	 * @param AMQPExchange 	$exchange
+	 * @param AMQPQueue 	$queue
+	 * @param AMQPEnvelope 	$message
 	 */
 	public function __construct ( Container $container, Queue $laravelQueue, AMQPExchange $exchange, AMQPQueue $queue, AMQPEnvelope $message )
 	{
@@ -43,16 +45,6 @@ class Job extends BaseJob implements JobContract
 		$this->amqpExchange = $exchange;
 		$this->amqpQueue = $queue;
 		$this->amqpMessage = $message;
-	}
-
-	/**
-	 * Fire the job.
-	 *
-	 * @return void
-	 */
-	public function fire ()
-	{
-		$this->resolveAndFire( json_decode( $this->amqpMessage->getBody(), true ) );
 	}
 
 	/**
@@ -128,6 +120,22 @@ class Job extends BaseJob implements JobContract
 		else {
 			$this->laravelQueue->push( $job, $data, $this->amqpQueue->getName() );
 		}
+	}
+
+	/**
+	 * Calculate the number of seconds with the given delay.
+	 *
+	 * @param  \DateTime|int  $delay
+	 * @return int
+	 */
+	protected function getSeconds($delay)
+	{
+		if ($delay instanceof DateTime)
+		{
+			return max(0, $delay->getTimestamp() - time());
+		}
+
+		return (int) $delay;
 	}
 
 	/**
