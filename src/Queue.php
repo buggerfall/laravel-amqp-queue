@@ -60,6 +60,19 @@ class Queue extends BaseQueue implements QueueContract
 	}
 
 	/**
+	 * Get the size of the queue.
+	 *
+	 * @param  string  $queue
+	 * @return int
+	 */
+	public function size($queue = null)
+	{
+		// declare queue
+		$queue = $this->getQueue( $queue );
+		return $queue->declareQueue();
+	}
+
+	/**
 	 * Push a new job onto the queue.
 	 *
 	 * @param  string $job
@@ -242,7 +255,7 @@ class Queue extends BaseQueue implements QueueContract
 		if ( $queueName ) {
 			$amqpQueue->setName( $queueName );
 		} else {
-			$amqpQueue->setName( array_get( $this->config, 'queue_defaults.name' ) );
+			$amqpQueue->setName( array_get( $this->config, 'defaults.queues.name' ) );
 		}
 
 		$options = $this->getOptionsForQueue( $amqpQueue->getName() );
