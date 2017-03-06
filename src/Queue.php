@@ -190,6 +190,8 @@ class Queue extends BaseQueue implements QueueContract
 	public function pop ( $queue = null )
 	{
 		$queue = $this->getQueue( $queue );
+		$queue->declareQueue();
+
 		$exchange = $this->getExchangeForQueue( $queue );
 
 		$message = $queue->get( AMQP_NOPARAM );
