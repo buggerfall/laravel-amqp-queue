@@ -196,7 +196,7 @@ class Queue extends BaseQueue implements QueueContract
 
 		$message = $queue->get( AMQP_NOPARAM );
 		if ( $message instanceof \AMQPEnvelope ) {
-			return new Job( $this->container, $this, $exchange, $queue, $message );
+			return new Job( $this->container, $this, $exchange, $this->connectionName, $queue, $message );
 		}
 
 		return null;

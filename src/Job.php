@@ -34,15 +34,23 @@ class Job extends BaseJob implements JobContract
 	 * @param Container 	$container
 	 * @param Queue			$laravelQueue
 	 * @param AMQPExchange 	$exchange
+	 * @param string		$connectionName
 	 * @param AMQPQueue 	$queue
 	 * @param AMQPEnvelope 	$message
 	 */
-	public function __construct ( Container $container, Queue $laravelQueue, AMQPExchange $exchange, AMQPQueue $queue, AMQPEnvelope $message )
-	{
+	public function __construct (
+		Container $container,
+		Queue $laravelQueue,
+		AMQPExchange $exchange,
+		$connectionName,
+		AMQPQueue $queue,
+		AMQPEnvelope $message
+	){
 		$this->container = $container;
 		$this->laravelQueue = $laravelQueue;
 
 		$this->amqpExchange = $exchange;
+		$this->connectionName = $connectionName;
 		$this->amqpQueue = $queue;
 		$this->amqpMessage = $message;
 	}
