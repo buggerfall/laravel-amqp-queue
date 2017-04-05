@@ -64,7 +64,7 @@ class Job extends BaseJob implements JobContract
 	{
 		$body = json_decode( $this->amqpMessage->getBody(), true );
 
-		return isset( $body[ 'data' ][ 'attempts' ] ) ? (int)$body[ 'data' ][ 'attempts' ] : 0;
+		return array_get($body, 'attempts', 0);
 	}
 
 	/**
@@ -113,14 +113,7 @@ class Job extends BaseJob implements JobContract
 		$body = json_decode( $this->amqpMessage->getBody(), true );
 		$job = $body[ 'job' ];
 		$data = $body[ 'data' ];
-
-		// increment the attempt counter
-		if ( isset( $data[ 'attempts' ] ) ) {
-			$data[ 'attempts' ]++;
-		}
-		else {
-			$data[ 'attempts' ] = 1;
-		}
+		$data['attempts'] = array_get($body, 'attempts', 0) + 1;
 
 		if ( $delay > 0 ) {
 			$this->laravelQueue->later( $delay, $job, $data, $this->amqpQueue->getName() );

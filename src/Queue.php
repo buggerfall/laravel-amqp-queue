@@ -333,4 +333,23 @@ class Queue extends BaseQueue implements QueueContract
 
 		return (int) $delay;
 	}
+
+	/**
+	 * Create a payload array from the given job and data.
+	 *
+	 * @param  string  $job
+	 * @param  mixed   $data
+	 * @param  string  $queue
+	 * @return array
+	 */
+	protected function createPayloadArray($job, $data = '', $queue = null)
+	{
+		$attempts = is_array($data) ? array_pull($data, 'attempts', 0) : 0;
+
+		$payload = is_object($job)
+			? $this->createObjectPayload($job)
+			: $this->createStringPayload($job, $data);
+
+		return array_merge($payload, ['attempts' => $attempts]);
+	}
 }
